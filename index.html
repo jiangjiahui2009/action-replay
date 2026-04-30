@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Action Replay 动作回看 - 逐帧拆解播放</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --accent: #FFC900;
+            --accent-light: #FFD633;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.6);
+            --text-tertiary: rgba(255, 255, 255, 0.4);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 2rem;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(ellipse at 50% 30%, rgba(255, 201, 0, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            border-radius: 28px;
+            margin-bottom: 3rem;
+            box-shadow: 0 20px 60px rgba(255, 201, 0, 0.3);
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+
+        .hero h1::before {
+            content: '';
+            position: absolute;
+            top: -80%;
+            left: -50vw;
+            right: -50vw;
+            bottom: -80%;
+            z-index: -1;
+            /* 长刻度线 + 中心横线 */
+            background-image:
+                repeating-linear-gradient(
+                    90deg,
+                    rgba(255, 255, 255, 0.12) 0px,
+                    rgba(255, 255, 255, 0.12) 1px,
+                    transparent 1px,
+                    transparent 280px
+                ),
+                linear-gradient(
+                    0deg,
+                    transparent calc(50% - 0.5px),
+                    rgba(255, 255, 255, 0.1) calc(50% - 0.5px),
+                    rgba(255, 255, 255, 0.1) calc(50% + 0.5px),
+                    transparent calc(50% + 0.5px)
+                );
+        }
+
+        .hero h1::after {
+            content: '';
+            position: absolute;
+            top: -15%;
+            left: -50vw;
+            right: -50vw;
+            bottom: -15%;
+            z-index: -1;
+            /* 短刻度线：每40px一条，高度是长刻度线的1/3 */
+            background-image: repeating-linear-gradient(
+                90deg,
+                rgba(255, 255, 255, 0.06) 0px,
+                rgba(255, 255, 255, 0.06) 1px,
+                transparent 1px,
+                transparent 40px
+            );
+            /* 在长刻度线位置挖空，避免叠加 */
+            -webkit-mask-image: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                transparent 1px,
+                black 1px,
+                black 279px,
+                transparent 279px,
+                transparent 280px
+            );
+            mask-image: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                transparent 1px,
+                black 1px,
+                black 279px,
+                transparent 279px,
+                transparent 280px
+            );
+        }
+
+        .hero h1 span {
+            color: var(--accent);
+        }
+
+        .hero .subtitle {
+            font-size: clamp(1rem, 2.5vw, 1.25rem);
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-bottom: 2.5rem;
+            letter-spacing: 0.05em;
+        }
+
+        .hero .description {
+            max-width: 520px;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.8;
+            margin-bottom: 3rem;
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--accent);
+            color: white;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .cta-button:hover {
+            background: var(--accent-light);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(255, 201, 0, 0.4);
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 3rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-tertiary);
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            animation: float 2s ease-in-out infinite;
+        }
+
+        .scroll-indicator svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(8px); }
+        }
+
+        /* Language Switch */
+        .lang-switch {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            z-index: 1000;
+            display: flex;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        .lang-switch button {
+            padding: 0.4rem 0.85rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.03em;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .lang-switch button.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        .lang-switch button:hover:not(.active) {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Language text control */
+        [data-lang="en"] { display: none; }
+        body.en [data-lang="zh"] { display: none; }
+        body.en [data-lang="en"] { display: inline; }
+        body.en [data-lang="en"].block { display: block; }
+
+        /* Features Section */
+        .features {
+            padding: 0;
+        }
+
+        .feature {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 100vh;
+            align-items: center;
+            position: relative;
+        }
+
+        .feature:nth-child(even) {
+            direction: rtl;
+        }
+
+        .feature:nth-child(even) > * {
+            direction: ltr;
+        }
+
+        .feature-content {
+            padding: 4rem 6rem;
+        }
+
+        .feature-full h2 {
+            position: relative;
+        }
+
+        /* 刻度线效果 - 03和04图片容器 */
+        .feature-03-images.ruler-line::before,
+        .feature-04-images.ruler-line::before {
+            top: -60px;
+            left: -50vw;
+            right: -50vw;
+            bottom: -60px;
+            pointer-events: none;
+            /* 长刻度线 + 中心横线 */
+            background-image:
+                repeating-linear-gradient(
+                    90deg,
+                    rgba(255, 255, 255, 0.12) 0px,
+                    rgba(255, 255, 255, 0.12) 1px,
+                    transparent 1px,
+                    transparent 280px
+                ),
+                linear-gradient(
+                    0deg,
+                    transparent calc(50% - 0.5px),
+                    rgba(255, 255, 255, 0.1) calc(50% - 0.5px),
+                    rgba(255, 255, 255, 0.1) calc(50% + 0.5px),
+                    transparent calc(50% + 0.5px)
+                );
+        }
+
+        .feature-03-images.ruler-line::after,
+        .feature-04-images.ruler-line::after {
+            top: -20px;
+            left: -50vw;
+            right: -50vw;
+            bottom: -20px;
+            pointer-events: none;
+            /* 短刻度线：每40px一条，高度是长刻度线的1/3 */
+            background-image: repeating-linear-gradient(
+                90deg,
+                rgba(255, 255, 255, 0.06) 0px,
+                rgba(255, 255, 255, 0.06) 1px,
+                transparent 1px,
+                transparent 40px
+            );
+            /* 在长刻度线位置挖空，避免叠加 */
+            -webkit-mask-image: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                transparent 1px,
+                black 1px,
+                black 279px,
+                transparent 279px,
+                transparent 280px
+            );
+            mask-image: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                transparent 1px,
+                black 1px,
+                black 279px,
+                transparent 279px,
+                transparent 280px
+            );
+        }
+
+        .feature-number {
+            font-size: 0.75rem;
+            color: var(--accent);
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .feature h2 {
+            font-size: clamp(1.75rem, 3vw, 2.5rem);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .feature p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.8;
+            max-width: 400px;
+        }
+
+        .feature-image-wrapper {
+            height: 60vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-image {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            background: #000;
+        }
+
+        .feature-image::-webkit-scrollbar {
+            display: none;
+        }
+
+        .feature-image img {
+            height: 100%;
+            width: auto;
+            max-width: none;
+            object-fit: contain;
+            scroll-snap-align: center;
+            flex-shrink: 0;
+        }
+
+        .scroll-progress {
+            position: absolute;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .scroll-progress.visible {
+            opacity: 1;
+        }
+
+        .progress-bar {
+            width: 60px;
+            height: 3px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.1s;
+            width: 0%;
+        }
+
+        .scroll-direction {
+            color: var(--text-tertiary);
+            font-size: 0.65rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* Feature 1 - Vertical Layout */
+        .feature-vertical {
+            grid-template-columns: 1fr;
+            height: 100vh;
+            min-height: auto;
+            padding: 0;
+            margin-bottom: 50vh;
+        }
+
+        .feature-vertical .feature-image-wrapper {
+            height: 70vh;
+        }
+
+        .feature-vertical .feature-content {
+            height: 30vh;
+            padding: 0 2rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .feature-vertical h2 {
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-vertical p {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        /* Feature 4 - Full Width */
+        .feature-full {
+            display: flex;
+            flex-direction: column;
+            min-height: auto;
+            padding: 0;
+            margin-bottom: 50vh;
+        }
+
+        .feature-full .feature-content {
+            text-align: center;
+            padding: 2rem 2rem 3rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .feature-full .feature-images {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            padding: 0 4rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            height: 60vh;
+        }
+
+        .feature-03-images {
+            display: flex;
+            gap: 9rem;
+            padding: 0 4rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            height: 70vh;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: visible;
+        }
+
+        /* 淡入上浮效果 */
+        .feature-03-images .feature-image-wrapper,
+        .feature-04-images .feature-image-wrapper {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.8s ease, transform 0.8s ease, box-shadow 0.8s ease;
+        }
+
+        .feature-03-images .feature-image-wrapper:first-child,
+        .feature-04-images .feature-image-wrapper:first-child {
+            transition-delay: 0.1s;
+        }
+
+        .feature-03-images .feature-image-wrapper:last-child,
+        .feature-04-images .feature-image-wrapper:last-child {
+            transition-delay: 0.25s;
+        }
+
+        .feature-image-wrapper.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .feature-03-images .feature-image-wrapper {
+            flex: 0 1 auto;
+            height: 90%;
+            position: relative;
+            background: #1c1c1e;
+            border-radius: 36px;
+            padding: 3px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 0 0 1px rgba(255,255,255,0.06);
+        }
+
+        .feature-03-images .feature-image-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 5px;
+            background: #000;
+            border-radius: 3px;
+            z-index: 10;
+        }
+
+        .feature-03-images .feature-image {
+            border-radius: 30px;
+            overflow: hidden;
+        }
+
+        .feature-04-images {
+            display: flex;
+            gap: 9rem;
+            padding: 0 4rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            height: 70vh;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: visible;
+        }
+
+        .feature-04-images .feature-image-wrapper {
+            flex: 0 1 auto;
+            height: 90%;
+            position: relative;
+            background: #1c1c1e;
+            border-radius: 36px;
+            padding: 3px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 0 0 1px rgba(255,255,255,0.06);
+        }
+
+        .feature-04-images .feature-image-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 5px;
+            background: #000;
+            border-radius: 3px;
+            z-index: 10;
+        }
+
+        .feature-04-images .feature-image {
+            border-radius: 30px;
+            overflow: hidden;
+        }
+
+        .feature-full .feature-images img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 16px;
+            background: #000;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 6rem 2rem;
+            background: var(--bg-secondary);
+        }
+
+        .footer h3 {
+            font-size: clamp(1.5rem, 3vw, 2rem);
+            margin-bottom: 1rem;
+        }
+
+        .footer p {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .footer .cta-button {
+            margin-bottom: 3rem;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            color: var(--text-tertiary);
+            font-size: 0.875rem;
+        }
+
+        .footer-links a {
+            color: var(--text-tertiary);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .feature-image-wrapper {
+                height: 50vh;
+            }
+
+            .feature-content {
+                padding: 2rem 1.5rem 3rem;
+            }
+
+            .feature-full .feature-images {
+                grid-template-columns: 1fr;
+                height: auto;
+                padding: 0 1.5rem;
+                min-height: 50vh;
+            }
+
+            .feature-full .feature-images img {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <button class="active" data-lang-btn="zh">中文</button>
+        <button data-lang-btn="en">EN</button>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <img src="app-icon.png" alt="Action Replay Icon" class="app-icon">
+        <h1>Action Replay <span><span data-lang="zh">动作回看</span><span data-lang="en"></span></span></h1>
+        <p class="description">
+            <span data-lang="zh">为运动爱好者、教练、运动员、舞者打造的逐帧播放器<br>支持网球、羽毛球、滑雪等多场景动作捕捉<br>慢放、逐帧、标记，让每一个细节都清晰可见</span>
+            <span data-lang="en">A frame-by-frame player for sports enthusiasts, coaches, athletes, and dancers. Supports tennis, badminton, skiing and more action capture scenarios. Slow motion, frame-by-frame, marking — every detail crystal clear.</span>
+        </p>
+        <a href="#" class="cta-button">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+            <span data-lang="zh">App Store 下载</span><span data-lang="en">App Store Download</span>
+        </a>
+        <div class="scroll-indicator">
+            <span><span data-lang="zh">向下滚动</span><span data-lang="en">Scroll Down</span></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12l7 7 7-7"/>
+            </svg>
+        </div>
+    </section>
+
+    <!-- Feature 1 - Vertical Layout -->
+        <div class="feature feature-vertical" data-scrollable="true">
+            <div class="feature-image-wrapper">
+                <div class="feature-image" data-scroll-container>
+                    <img src="/Users/admin/Desktop/网站素材/01.JPG" alt="逐帧播放功能">
+                </div>
+                <div class="scroll-progress" data-scroll-progress>
+                    <div class="progress-bar">
+                        <div class="progress-fill" data-progress-fill></div>
+                    </div>
+                    <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                </div>
+            </div>
+            <div class="feature-content">
+                <h2><span data-lang="zh">图片拼接</span><span data-lang="en">Image Stitching</span></h2>
+                <p><span data-lang="zh">捕捉精彩动作，快捷拼接成一组图，<br>方便对比分析，观察动作轨迹与变化过程。</span><span data-lang="en">Capture exciting moves and quickly stitch into a sequence for easy comparison and analysis of motion trajectories.</span></p>
+            </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature feature-vertical" data-scrollable="true">
+            <div class="feature-image-wrapper">
+                <div class="feature-image" data-scroll-container>
+                    <img src="/Users/admin/Desktop/网站素材/02.png" alt="逐帧滑轨控制">
+                </div>
+                <div class="scroll-progress" data-scroll-progress>
+                    <div class="progress-bar">
+                        <div class="progress-fill" data-progress-fill></div>
+                    </div>
+                    <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                </div>
+            </div>
+            <div class="feature-content">
+                <h2><span data-lang="zh">逐帧滚动</span><span data-lang="en">Frame Scroll</span></h2>
+                <p><span data-lang="zh">支持逐帧滚动播放，不放过任何一个动作细节，<br>方便观察一闪而过的瞬间。</span><span data-lang="en">Scroll through frame by frame, never miss a detail — perfect for observing split-second moments.</span></p>
+            </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature feature-full" data-scrollable="true">
+            <div class="feature-03-images ruler-line">
+                <div class="feature-image-wrapper">
+                    <div class="feature-image" data-scroll-container>
+                        <img src="/Users/admin/Desktop/网站素材/03.PNG" alt="放大捕捉1">
+                    </div>
+                    <div class="scroll-progress" data-scroll-progress>
+                        <div class="progress-bar">
+                            <div class="progress-fill" data-progress-fill></div>
+                        </div>
+                        <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                    </div>
+                </div>
+                <div class="feature-image-wrapper">
+                    <div class="feature-image" data-scroll-container>
+                        <img src="/Users/admin/Desktop/网站素材/03-2.PNG" alt="放大捕捉2">
+                    </div>
+                    <div class="scroll-progress" data-scroll-progress>
+                        <div class="progress-bar">
+                            <div class="progress-fill" data-progress-fill></div>
+                        </div>
+                        <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-content">
+                <h2><span data-lang="zh">放大捕捉</span><span data-lang="en">Zoom & Capture</span></h2>
+                <p><span data-lang="zh">截图捕捉关键部分，放大查看动作细节。</span><span data-lang="en">Capture key moments, zoom in to examine motion details.</span></p>
+            </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature feature-full" data-scrollable="true">
+            <div class="feature-04-images ruler-line">
+                <div class="feature-image-wrapper">
+                    <div class="feature-image" data-scroll-container>
+                        <img src="/Users/admin/Desktop/网站素材/04-1.PNG" alt="动作标注1">
+                    </div>
+                    <div class="scroll-progress" data-scroll-progress>
+                        <div class="progress-bar">
+                            <div class="progress-fill" data-progress-fill></div>
+                        </div>
+                        <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                    </div>
+                </div>
+                <div class="feature-image-wrapper">
+                    <div class="feature-image" data-scroll-container>
+                        <img src="/Users/admin/Desktop/网站素材/04-2.png" alt="动作标注2">
+                    </div>
+                    <div class="scroll-progress" data-scroll-progress>
+                        <div class="progress-bar">
+                            <div class="progress-fill" data-progress-fill></div>
+                        </div>
+                        <span class="scroll-direction"><span data-lang="zh">滚动查看</span><span data-lang="en">Scroll</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-content">
+                <h2><span data-lang="zh">标注细节</span><span data-lang="en">Annotate Details</span></h2>
+                <p><span data-lang="zh">支持手动编辑标注图片，辅助对动作的分析与理解。</span><span data-lang="en">Manually annotate images to assist motion analysis and understanding.</span></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <h3>Action Replay <span data-lang="zh">动作回看</span><span data-lang="en"></span></h3>
+        <p><span data-lang="zh">让每一个动作都清晰可见</span><span data-lang="en">Make every motion crystal clear</span></p>
+        <a href="#" class="cta-button">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+            <span data-lang="zh">立即下载</span><span data-lang="en">Download Now</span>
+        </a>
+        <div class="footer-links">
+            <a href="#"><span data-lang="zh">隐私政策</span><span data-lang="en">Privacy Policy</span></a>
+            <a href="#"><span data-lang="zh">使用条款</span><span data-lang="en">Terms of Use</span></a>
+            <a href="#"><span data-lang="zh">联系我们</span><span data-lang="en">Contact Us</span></a>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scrollableFeatures = document.querySelectorAll('[data-scrollable="true"]');
+
+            scrollableFeatures.forEach(feature => {
+                const container = feature.querySelector('[data-scroll-container]');
+                const progressEl = feature.querySelector('[data-scroll-progress]');
+                const progressFill = feature.querySelector('[data-progress-fill]');
+
+                if (!container || !progressEl) return;
+
+                let isLocked = false;
+                let lastScrollTop = 0;
+
+                // Update progress bar
+                function updateProgress() {
+                    const scrollLeft = container.scrollLeft;
+                    const maxScroll = container.scrollWidth - container.clientWidth;
+                    const progress = maxScroll > 0 ? (scrollLeft / maxScroll) * 100 : 100;
+                    progressFill.style.width = progress + '%';
+
+                    // Show/hide progress indicator
+                    if (maxScroll > 10) {
+                        progressEl.classList.add('visible');
+                    } else {
+                        progressEl.classList.remove('visible');
+                    }
+                }
+
+                container.addEventListener('scroll', updateProgress);
+                updateProgress();
+
+                // Handle mouse wheel - intercept vertical scroll for horizontal movement
+                container.addEventListener('wheel', function(e) {
+                    const scrollWidth = container.scrollWidth - container.clientWidth;
+                    const currentScroll = container.scrollLeft;
+                    const deltaY = e.deltaY;
+
+                    // If there's more horizontal scroll available
+                    if (scrollWidth > 5) {
+                        const willScrollRight = deltaY > 0 && currentScroll < scrollWidth;
+                        const willScrollLeft = deltaY < 0 && currentScroll > 0;
+
+                        // If scrolled to edge, allow vertical scroll to pass
+                        const atRightEdge = currentScroll >= scrollWidth - 2;
+                        const atLeftEdge = currentScroll <= 2;
+
+                        if ((deltaY > 0 && atRightEdge) || (deltaY < 0 && atLeftEdge)) {
+                            return; // Let vertical scroll pass
+                        }
+
+                        // Otherwise, intercept and scroll horizontally
+                        e.preventDefault();
+                        container.scrollLeft += deltaY;
+                        updateProgress();
+                    }
+                }, { passive: false });
+
+                // Touch support
+                let touchStartX = 0;
+                let touchStartY = 0;
+
+                container.addEventListener('touchstart', function(e) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+
+                container.addEventListener('touchmove', function(e) {
+                    const deltaX = touchStartX - e.touches[0].clientX;
+                    const deltaY = touchStartY - e.touches[0].clientY;
+
+                    // If horizontal movement is greater, prevent vertical scroll
+                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        e.preventDefault();
+                        container.scrollLeft += deltaX;
+                        touchStartX = e.touches[0].clientX;
+                        updateProgress();
+                    }
+                }, { passive: false });
+            });
+        });
+
+        // 淡入上浮效果
+        const fadeTargets = document.querySelectorAll('.feature-03-images, .feature-04-images');
+        const fadeObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.querySelectorAll('.feature-image-wrapper').forEach((el, i) => {
+                        setTimeout(() => el.classList.add('visible'), i * 150);
+                    });
+                }
+            });
+        }, { threshold: 0.2 });
+        fadeTargets.forEach(t => fadeObserver.observe(t));
+
+        // 语言切换
+        const langBtns = document.querySelectorAll('[data-lang-btn]');
+            langBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const lang = btn.dataset.langBtn;
+                    document.body.classList.toggle('en', lang === 'en');
+                    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+                    document.title = lang === 'en'
+                        ? 'Action Replay - Frame-by-Frame Video Player'
+                        : 'Action Replay 动作回看 - 逐帧拆解播放';
+                    langBtns.forEach(b => b.classList.toggle('active', b === btn));
+                });
+        });
+    </script>
+</body>
+</html>
